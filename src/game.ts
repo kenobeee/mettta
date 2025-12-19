@@ -53,6 +53,8 @@ export class Game {
   private player: Player | null = null;
   private bgOffsetX = 0;
   private readonly bgParallax = 0.2;
+  private health = 100;
+  private stamina = 100;
 
   private last = performance.now();
   private accumulator = 0;
@@ -308,6 +310,37 @@ export class Game {
       );
       this.ctx.restore();
     }
+
+    this.drawHud();
+  }
+
+  private drawHud() {
+    const barWidth = this.camera.viewWidth * 0.05;
+    const barHeight = 8;
+    const margin = 12;
+    const gap = 6;
+    const border = 1;
+    const startX = margin;
+    const startY = this.camera.viewHeight - margin - (barHeight + gap) * 2;
+
+    const drawBar = (
+      y: number,
+      value: number,
+      color: string
+    ) => {
+      const clamped = Math.max(0, Math.min(100, value));
+      const fillWidth = (barWidth - border * 2) * (clamped / 100);
+
+      this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      this.ctx.fillRect(startX, y, barWidth, barHeight);
+
+      this.ctx.fillStyle = color;
+      this.ctx.fillRect(startX + border, y + border, fillWidth, barHeight - border * 2);
+    };
+
+    drawBar(startY, this.health, '#e23d55'); // health - red
+
+    drawBar(startY + barHeight + gap, this.stamina, '#e9edf7'); // stamina - white
   }
 
   private loop = (now: number) => {
