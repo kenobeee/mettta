@@ -1,12 +1,12 @@
-import { Frame } from '../types';
+import { Frame, Mode } from '../types';
 
 // Simple frame-step animator with multiple states.
 export class SpriteAnimator {
   private timer = 0;
   private frame = 0;
   private readonly frameTime = 1 / 60; // 60 fps
-  private currentMode: 'idle' | 'walk' | 'run' | 'idle-attack' | 'move-attack' = 'idle';
-
+  private currentMode: Mode = 'idle';
+  
   constructor(
     private readonly idle: Frame[],
     private readonly walk: Frame[],
@@ -15,7 +15,7 @@ export class SpriteAnimator {
     private readonly moveAttack: Frame[]
   ) {}
 
-  update(dt: number, mode: 'idle' | 'walk' | 'run' | 'idle-attack' | 'move-attack') {
+  update(dt: number, mode: Mode) {
     if (mode !== this.currentMode) {
       this.currentMode = mode;
       this.frame = 0;

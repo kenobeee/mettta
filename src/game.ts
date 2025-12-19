@@ -7,9 +7,20 @@ import { Camera } from './graphics/camera';
 import { SpriteAnimator } from './graphics/spriteAnimator';
 import { TileRenderer } from './graphics/tileRenderer';
 import { InputManager } from './input';
-import { Facing, Frame } from './types';
+import { Facing, Frame, Mode } from './types';
 import { loadFrames, loadImage } from './utils/assets';
 import { Player } from './world/player';
+
+// Collision groups:
+// player: membership 0x1, collides only with static (mask 0x2)
+// static: membership 0x2, collides with player|bot (mask 0x1|0x4)
+// bot:    membership 0x4, collides only with static (mask 0x2)
+const GROUP_PLAYER = 0x0001;
+const GROUP_STATIC = 0x0002;
+const GROUP_BOT = 0x0004;
+// Helper: upper 16 bits = membership, lower 16 bits = filter (alternative layout if previous mask failed)
+const cg = (membership: number, filter: number) =>
+  (membership << 16) | filter;
 
 const idleImports = import.meta.glob('../assets/player/idle/*.png', {
   query: '?url',
@@ -39,6 +50,34 @@ const moveAttackImports = import.meta.glob(
     eager: true
   }
 );
+const botIdleImports = import.meta.glob('../assets/player2/idle/*.png', {
+  query: '?url',
+  import: 'default',
+  eager: true
+});
+const botWalkImports = import.meta.glob('../assets/player2/walking/*.png', {
+  query: '?url',
+  import: 'default',
+  eager: true
+});
+const botRunImports = import.meta.glob('../assets/player2/running/*.png', {
+  query: '?url',
+  import: 'default',
+  eager: true
+});
+const botIdleAttackImports = import.meta.glob('../assets/player2/atack/*.png', {
+  query: '?url',
+  import: 'default',
+  eager: true
+});
+const botMoveAttackImports = import.meta.glob(
+  '../assets/player2/running-atack/*.png',
+  {
+    query: '?url',
+    import: 'default',
+    eager: true
+  }
+);
 
 // Central game orchestrator: loads assets, wires physics, input, render.
 export class Game {
@@ -62,8 +101,10 @@ export class Game {
   private world: RAPIER.World | null = null;
   private tileRenderer: TileRenderer | null = null;
   private animator: SpriteAnimator | null = null;
+  private botAnimator: SpriteAnimator | null = null;
   private bg: Frame | null = null;
   private player: Player | null = null;
+  private bot: Player | null = null;
   private bgOffsetX = 0;
   private readonly bgParallax = 0.2;
   private health = 100;
@@ -76,6 +117,10 @@ export class Game {
   private attackDurationIdle = 0.5;
   private attackDurationMove = 0.5;
   private lastAttackPressed = false;
+  private botMode: Mode = 'idle';
+  private botFacing: Facing = 1;
+  private botTimer = 0;
+  private botMove = false;
 
   private last = performance.now();
   private accumulator = 0;
@@ -111,15 +156,37 @@ export class Game {
       runningFrames,
       walkingFrames,
       idleAttackFrames,
-      moveAttackFrames
-    ]: [Frame, Frame, Frame[], Frame[], Frame[], Frame[], Frame[]] = await Promise.all([
+      moveAttackFrames,
+      botIdleFrames,
+      botWalkFrames,
+      botRunFrames,
+      botIdleAttackFrames,
+      botMoveAttackFrames
+    ]: [
+      Frame,
+      Frame,
+      Frame[],
+      Frame[],
+      Frame[],
+      Frame[],
+      Frame[],
+      Frame[],
+      Frame[],
+      Frame[],
+      Frame[]
+    ] = await Promise.all([
       loadImage(bgUrl),
       loadImage(tileUrl),
       loadFrames(idleImports),
       loadFrames(runningImports),
       loadFrames(walkingImports),
       loadFrames(idleAttackImports),
-      loadFrames(moveAttackImports)
+      loadFrames(moveAttackImports),
+      loadFrames(botIdleImports),
+      loadFrames(botWalkImports),
+      loadFrames(botRunImports),
+      loadFrames(botIdleAttackImports),
+      loadFrames(botMoveAttackImports)
     ]);
 
     this.bg = bg;
@@ -131,6 +198,13 @@ export class Game {
       idleAttackFrames,
       moveAttackFrames
     );
+    this.botAnimator = new SpriteAnimator(
+      botIdleFrames,
+      botWalkFrames,
+      botRunFrames,
+      botIdleAttackFrames,
+      botMoveAttackFrames
+    );
     this.attackDurationIdle =
       idleAttackFrames.length > 0
         ? idleAttackFrames.length * (1 / 60)
@@ -141,6 +215,7 @@ export class Game {
         : 0.5;
     this.createBounds();
     this.createPlayer();
+    this.createBot();
     requestAnimationFrame(this.loop);
   }
 
@@ -149,13 +224,15 @@ export class Game {
 
     const staticBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
 
+    // Collision groups: static=0x1, player=0x2, bot=0x4
     this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(
         this.groundHalfWidth,
         this.groundThickness / 2
       )
         .setTranslation(0, this.groundY)
-        .setFriction(1),
+        .setFriction(1)
+        .setCollisionGroups(cg(GROUP_STATIC, GROUP_PLAYER | GROUP_BOT)),
       staticBody
     );
     this.world.createCollider(
@@ -164,7 +241,8 @@ export class Game {
         this.wallThickness / 2
       )
         .setTranslation(0, this.ceilingY)
-        .setFriction(1),
+        .setFriction(1)
+        .setCollisionGroups(cg(GROUP_STATIC, GROUP_PLAYER | GROUP_BOT)),
       staticBody
     );
     this.world.createCollider(
@@ -173,7 +251,8 @@ export class Game {
         this.wallHalfHeight
       )
         .setTranslation(this.leftX, this.groundThickness / 2)
-        .setFriction(1),
+        .setFriction(1)
+        .setCollisionGroups(cg(GROUP_STATIC, GROUP_PLAYER | GROUP_BOT)),
       staticBody
     );
     this.world.createCollider(
@@ -182,7 +261,8 @@ export class Game {
         this.wallHalfHeight
       )
         .setTranslation(this.rightX, this.groundThickness / 2)
-        .setFriction(1),
+        .setFriction(1)
+        .setCollisionGroups(cg(GROUP_STATIC, GROUP_PLAYER | GROUP_BOT)),
       staticBody
     );
   }
@@ -194,6 +274,31 @@ export class Game {
       x: 0,
       y: this.groundY + this.groundThickness / 2 + 1
     });
+    this.player.collider.setCollisionGroups(cg(GROUP_PLAYER, GROUP_STATIC));
+    this.player.collider.setActiveCollisionTypes(
+      RAPIER.ActiveCollisionTypes.DEFAULT &
+        ~RAPIER.ActiveCollisionTypes.DYNAMIC_DYNAMIC
+    );
+  }
+
+  private createBot() {
+    if (!this.world) return;
+
+    const x = (Math.random() * 0.8 - 0.4) * this.worldSize;
+
+    this.bot = new Player(this.world, {
+      x,
+      y: this.groundY + this.groundThickness / 2 + 1
+    });
+    this.bot.collider.setCollisionGroups(cg(GROUP_BOT, GROUP_STATIC));
+    this.bot.collider.setActiveCollisionTypes(
+      RAPIER.ActiveCollisionTypes.DEFAULT &
+        ~RAPIER.ActiveCollisionTypes.DYNAMIC_DYNAMIC
+    );
+    this.botTimer = 0;
+    this.botMove = false;
+    this.botMode = 'idle';
+    this.botFacing = 1;
   }
 
   private stepPhysics(dt: number) {
@@ -226,15 +331,18 @@ export class Game {
     const onGround = footY <= groundTop + 0.05 && Math.abs(vel.y) < 1;
 
     const hasDir = this.input.state.left || this.input.state.right;
+
     this.sprintLock = Math.max(0, this.sprintLock - dt);
     const wantsSprint = this.input.state.sprint && this.sprintLock <= 0 && this.stamina > 0;
     const running = hasDir && wantsSprint;
 
     // Attacks: edge-triggered on space
     const attackPressed = this.input.state.attack;
+
     if (attackPressed && !this.lastAttackPressed && this.attackMode === 'none') {
       const movingAttack = hasDir;
       const cost = movingAttack ? 5 : 2;
+
       if (this.stamina >= cost) {
         this.stamina = Math.max(0, this.stamina - cost);
         this.attackMode = movingAttack ? 'move' : 'idle';
@@ -243,6 +351,7 @@ export class Game {
           : this.attackDurationIdle;
       }
     }
+
     this.lastAttackPressed = attackPressed;
 
     if (this.attackMode !== 'none') {
@@ -256,6 +365,7 @@ export class Game {
     if (running) {
       this.runTime += dt;
       const drainPerSec = 0.5 * Math.exp(0.5 * this.runTime); // exponential drain
+
       this.stamina = Math.max(0, this.stamina - drainPerSec * dt);
       if (this.stamina <= 0) {
         this.stamina = 0;
@@ -355,6 +465,49 @@ export class Game {
     // Ground tiles
     this.tileRenderer?.drawGround(this.groundY, this.worldHalf);
 
+    // Bot render
+    if (this.bot && this.botAnimator) {
+      const botBody = this.bot.body;
+      const botPos = botBody.translation();
+      const botVel = botBody.linvel();
+
+      if (botVel.x > 0.1) this.botFacing = 1;
+
+      if (botVel.x < -0.1) this.botFacing = -1;
+
+      const botMode: Mode = this.botMove ? 'walk' : 'idle';
+      const botSprite = this.botAnimator.update(dt, botMode);
+      const { x: bx, y: by } = this.camera.worldToScreen(
+        botPos.x,
+        botPos.y - this.bot.halfH
+      );
+
+      if (botSprite) {
+        const spriteHeightPx = 2 * this.bot.halfH * this.camera.metersToPixels;
+        const padRatio = 170 / 900;
+        const srcY = botSprite.height * padRatio;
+        const srcH = botSprite.height - srcY * 2;
+        const srcW = botSprite.width;
+        const spriteWidthPx = spriteHeightPx * (srcW / srcH);
+
+        this.ctx.save();
+        this.ctx.translate(bx, by);
+        this.ctx.scale(this.botFacing, 1);
+        this.ctx.drawImage(
+          botSprite,
+          0,
+          srcY,
+          srcW,
+          srcH,
+          -spriteWidthPx / 2,
+          -spriteHeightPx,
+          spriteWidthPx,
+          spriteHeightPx
+        );
+        this.ctx.restore();
+      }
+    }
+
     // Player sprite
     const vel = body.linvel();
     const speed = Math.abs(vel.x);
@@ -362,6 +515,7 @@ export class Game {
     const wantsSprint = this.input.state.sprint && this.sprintLock <= 0 && this.stamina > 0;
     const isMoving = speed > 0.2 && hasDir;
     let mode: 'idle' | 'walk' | 'run' | 'idle-attack' | 'move-attack' = 'idle';
+
     if (this.attackMode === 'idle') {
       mode = 'idle-attack';
     } else if (this.attackMode === 'move') {
@@ -369,6 +523,7 @@ export class Game {
     } else if (isMoving) {
       mode = wantsSprint && this.isSprinting ? 'run' : 'walk';
     }
+
     const sprite = this.animator.update(dt, mode);
     const facing: Facing = this.input.state.facing;
     const { x: sx, y: sy } = this.camera.worldToScreen(
@@ -431,6 +586,7 @@ export class Game {
       if (alpha < 1) {
         this.ctx.globalAlpha = alpha;
       }
+
       this.ctx.fillRect(startX + border, y + border, fillWidth, barHeight - border * 2);
       this.ctx.globalAlpha = 1;
     };
@@ -439,6 +595,7 @@ export class Game {
 
     const lowStamina = this.stamina < 33;
     const blinkAlpha = lowStamina ? 0.4 + 0.4 * Math.abs(Math.sin(this.hudTime * 3)) : 1;
+
     drawBar(startY + barHeight + gap, this.stamina, '#e9edf7', blinkAlpha); // stamina - white
   }
 
@@ -449,9 +606,61 @@ export class Game {
 
     this.applyControl(dt);
     this.stepPhysics(dt);
+    this.updateBot(dt);
     this.render(dt);
 
     requestAnimationFrame(this.loop);
   };
+
+  private updateBot(dt: number) {
+    if (!this.bot || !this.botAnimator || !this.world) return;
+
+    const body = this.bot.body;
+    const vel = body.linvel();
+    const pos = body.translation();
+    const footY = pos.y - this.bot.halfH;
+    const groundTop = this.groundY + this.groundThickness / 2;
+    const onGround = footY <= groundTop + 0.05 && Math.abs(vel.y) < 1;
+
+    this.botTimer -= dt;
+    if (this.botTimer <= 0) {
+      this.botMove = Math.random() > 0.4; // 60% move, 40% idle
+      this.botTimer = 1 + Math.random() * 2; // 1-3 seconds
+      if (this.botMove) {
+        this.botFacing = Math.random() > 0.5 ? 1 : -1;
+      }
+    }
+
+    const walkSpeed = 2.2;
+    const desiredVx = this.botMove ? walkSpeed * this.botFacing : 0;
+    let finalDesiredVx = desiredVx;
+    const nearRight = pos.x > this.rightX - 0.5;
+    const nearLeft = pos.x < this.leftX + 0.5;
+
+    if (nearRight) {
+      this.botFacing = -1;
+      finalDesiredVx = Math.min(finalDesiredVx, 0);
+    }
+
+    if (nearLeft) {
+      this.botFacing = 1;
+      finalDesiredVx = Math.max(finalDesiredVx, 0);
+    }
+    
+    const control = onGround ? 10 : 4;
+    const newVx = vel.x + (finalDesiredVx - vel.x) * control * dt;
+
+    body.setLinvel({ x: newVx, y: vel.y }, true);
+
+    if (onGround) {
+      body.setTranslation(
+        { x: pos.x, y: groundTop + this.bot.halfH },
+        true
+      );
+      if (vel.y !== 0) {
+        body.setLinvel({ x: newVx, y: 0 }, true);
+      }
+    }
+  }
 }
 
