@@ -6,6 +6,7 @@ export class InputManager {
     left: false,
     right: false,
     sprint: false,
+    attack: false,
     facing: 1 as Facing
   };
 
@@ -18,6 +19,8 @@ export class InputManager {
       A: 'left',
       d: 'right',
       D: 'right',
+      ' ': 'attack',
+      Space: 'attack',
       Shift: 'sprint',
       ShiftLeft: 'sprint',
       ShiftRight: 'sprint'
@@ -31,6 +34,7 @@ export class InputManager {
         if (mapped === 'left') this.state.facing = -1;
 
         if (mapped === 'right') this.state.facing = 1;
+        if (mapped === 'attack') e.preventDefault();
       }
     });
 
@@ -39,6 +43,7 @@ export class InputManager {
 
       if (mapped) {
         this.state[mapped] = false;
+        if (mapped === 'attack') e.preventDefault();
       }
     });
 
@@ -46,6 +51,7 @@ export class InputManager {
       this.state.left = false;
       this.state.right = false;
       this.state.sprint = false;
+      this.state.attack = false;
     });
   }
 }

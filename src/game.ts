@@ -26,6 +26,19 @@ const walkingImports = import.meta.glob('../assets/player/walking/*.png', {
   import: 'default',
   eager: true
 });
+const idleAttackImports = import.meta.glob('../assets/player/atack/*.png', {
+  query: '?url',
+  import: 'default',
+  eager: true
+});
+const moveAttackImports = import.meta.glob(
+  '../assets/player/running-atack/*.png',
+  {
+    query: '?url',
+    import: 'default',
+    eager: true
+  }
+);
 
 // Central game orchestrator: loads assets, wires physics, input, render.
 export class Game {
@@ -58,6 +71,11 @@ export class Game {
   private runTime = 0;
   private sprintLock = 0;
   private hudTime = 0;
+  private attackMode: 'none' | 'idle' | 'move' = 'none';
+  private attackTimer = 0;
+  private attackDurationIdle = 0.5;
+  private attackDurationMove = 0.5;
+  private lastAttackPressed = false;
 
   private last = performance.now();
   private accumulator = 0;
@@ -86,23 +104,41 @@ export class Game {
     params.maxVelocityIterations = 16;
     params.maxPositionIterations = 8;
 
-    const [bg, tile, idleFrames, runningFrames, walkingFrames]: [
-      Frame,
-      Frame,
-      Frame[],
-      Frame[],
-      Frame[]
-    ] = await Promise.all([
+    const [
+      bg,
+      tile,
+      idleFrames,
+      runningFrames,
+      walkingFrames,
+      idleAttackFrames,
+      moveAttackFrames
+    ]: [Frame, Frame, Frame[], Frame[], Frame[], Frame[], Frame[]] = await Promise.all([
       loadImage(bgUrl),
       loadImage(tileUrl),
       loadFrames(idleImports),
       loadFrames(runningImports),
-      loadFrames(walkingImports)
+      loadFrames(walkingImports),
+      loadFrames(idleAttackImports),
+      loadFrames(moveAttackImports)
     ]);
 
     this.bg = bg;
     this.tileRenderer = new TileRenderer(this.ctx, this.camera, tile);
-    this.animator = new SpriteAnimator(idleFrames, walkingFrames, runningFrames);
+    this.animator = new SpriteAnimator(
+      idleFrames,
+      walkingFrames,
+      runningFrames,
+      idleAttackFrames,
+      moveAttackFrames
+    );
+    this.attackDurationIdle =
+      idleAttackFrames.length > 0
+        ? idleAttackFrames.length * (1 / 60)
+        : 0.5;
+    this.attackDurationMove =
+      moveAttackFrames.length > 0
+        ? moveAttackFrames.length * (1 / 60)
+        : 0.5;
     this.createBounds();
     this.createPlayer();
     requestAnimationFrame(this.loop);
@@ -193,6 +229,29 @@ export class Game {
     this.sprintLock = Math.max(0, this.sprintLock - dt);
     const wantsSprint = this.input.state.sprint && this.sprintLock <= 0 && this.stamina > 0;
     const running = hasDir && wantsSprint;
+
+    // Attacks: edge-triggered on space
+    const attackPressed = this.input.state.attack;
+    if (attackPressed && !this.lastAttackPressed && this.attackMode === 'none') {
+      const movingAttack = hasDir;
+      const cost = movingAttack ? 5 : 2;
+      if (this.stamina >= cost) {
+        this.stamina = Math.max(0, this.stamina - cost);
+        this.attackMode = movingAttack ? 'move' : 'idle';
+        this.attackTimer = movingAttack
+          ? this.attackDurationMove
+          : this.attackDurationIdle;
+      }
+    }
+    this.lastAttackPressed = attackPressed;
+
+    if (this.attackMode !== 'none') {
+      this.attackTimer -= dt;
+      if (this.attackTimer <= 0) {
+        this.attackMode = 'none';
+        this.attackTimer = 0;
+      }
+    }
 
     if (running) {
       this.runTime += dt;
@@ -299,15 +358,17 @@ export class Game {
     // Player sprite
     const vel = body.linvel();
     const speed = Math.abs(vel.x);
-    // reuse sprint flag from control logic
     const hasDir = this.input.state.left || this.input.state.right;
     const wantsSprint = this.input.state.sprint && this.sprintLock <= 0 && this.stamina > 0;
-    const mode: 'idle' | 'walk' | 'run' =
-      speed > 0.2 && hasDir
-        ? wantsSprint && this.isSprinting
-          ? 'run'
-          : 'walk'
-        : 'idle';
+    const isMoving = speed > 0.2 && hasDir;
+    let mode: 'idle' | 'walk' | 'run' | 'idle-attack' | 'move-attack' = 'idle';
+    if (this.attackMode === 'idle') {
+      mode = 'idle-attack';
+    } else if (this.attackMode === 'move') {
+      mode = 'move-attack';
+    } else if (isMoving) {
+      mode = wantsSprint && this.isSprinting ? 'run' : 'walk';
+    }
     const sprite = this.animator.update(dt, mode);
     const facing: Facing = this.input.state.facing;
     const { x: sx, y: sy } = this.camera.worldToScreen(
