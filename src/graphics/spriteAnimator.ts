@@ -30,11 +30,13 @@ export class SpriteAnimator {
             ? this.walk
             : this.idle
           : this.idle;
+
     this.timer += dt;
     if (this.timer > this.frameTime) {
       this.timer = 0;
       this.frame = (this.frame + 1) % set.length;
     }
+    
     return set[this.frame % set.length];
   }
 }

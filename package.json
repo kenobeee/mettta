@@ -9,18 +9,18 @@
     "build:main": "tsc -p tsconfig.node.json",
     "build": "npm run build:main && npm run build:renderer",
     "start": "NODE_ENV=production electron .",
-    "lint": "eslint \"{src,electron}/**/*.{ts,tsx}\""
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint \"{src,electron}/**/*.{ts,tsx}\""
   },
   "dependencies": {
     "@dimforge/rapier2d-compat": "^0.14.0"
   },
   "devDependencies": {
     "@types/node": "^20.19.27",
-    "@typescript-eslint/eslint-plugin": "^8.15.0",
-    "@typescript-eslint/parser": "^8.15.0",
+    "@typescript-eslint/eslint-plugin": "^7.9.0",
+    "@typescript-eslint/parser": "^7.9.0",
     "concurrently": "^8.2.0",
     "electron": "^30.0.0",
-    "eslint": "^9.7.0",
+    "eslint": "^8.57.0",
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-promise": "^6.1.1",
     "ts-node": "^10.9.2",

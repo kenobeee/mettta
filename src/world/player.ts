@@ -1,4 +1,5 @@
 import RAPIER from '@dimforge/rapier2d-compat';
+
 import { Vec2 } from '../types';
 
 // Player rigid body + collider setup.

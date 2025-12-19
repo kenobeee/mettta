@@ -1,13 +1,15 @@
 import RAPIER from '@dimforge/rapier2d-compat';
+
 import bgUrl from '../assets/bg.png';
 import tileUrl from '../assets/tile.png';
-import { Facing, Frame, Vec2 } from './types';
-import { InputManager } from './input';
+
 import { Camera } from './graphics/camera';
-import { TileRenderer } from './graphics/tileRenderer';
 import { SpriteAnimator } from './graphics/spriteAnimator';
-import { Player } from './world/player';
+import { TileRenderer } from './graphics/tileRenderer';
+import { InputManager } from './input';
+import { Facing, Frame } from './types';
 import { loadFrames, loadImage } from './utils/assets';
+import { Player } from './world/player';
 
 const idleImports = import.meta.glob('../assets/player/idle/*.png', {
   query: '?url',
@@ -56,12 +58,16 @@ export class Game {
   private accumulator = 0;
   private readonly fixedDt = 1 / 120;
   private readonly maxStepsPerFrame = 10;
-
+  
   constructor() {
     const canvas = document.querySelector<HTMLCanvasElement>('#app');
+
     if (!canvas) throw new Error('Canvas element #app not found');
+
     const ctx = canvas.getContext('2d');
+
     if (!ctx) throw new Error('Canvas 2D context unavailable');
+
     this.canvas = canvas;
     this.ctx = ctx;
     this.camera = new Camera(this.canvas, this.ctx, this.worldSize);
@@ -70,17 +76,25 @@ export class Game {
   async init() {
     await RAPIER.init();
     this.world = new RAPIER.World(this.gravity);
-    this.world.integrationParameters.maxVelocityIterations = 16;
-    this.world.integrationParameters.maxPositionIterations = 8;
+    const params = this.world.integrationParameters;
 
-    const [bg, tile, idleFrames, runningFrames, walkingFrames] =
-      await Promise.all([
-        loadImage(bgUrl),
-        loadImage(tileUrl),
-        loadFrames(idleImports),
-        loadFrames(runningImports),
-        loadFrames(walkingImports)
-      ]);
+    params.maxVelocityIterations = 16;
+    params.maxPositionIterations = 8;
+
+    const [bg, tile, idleFrames, runningFrames, walkingFrames]: [
+      Frame,
+      Frame,
+      Frame[],
+      Frame[],
+      Frame[]
+    ] = await Promise.all([
+      loadImage(bgUrl),
+      loadImage(tileUrl),
+      loadFrames(idleImports),
+      loadFrames(runningImports),
+      loadFrames(walkingImports)
+    ]);
+
     this.bg = bg;
     this.tileRenderer = new TileRenderer(this.ctx, this.camera, tile);
     this.animator = new SpriteAnimator(idleFrames, walkingFrames, runningFrames);
@@ -91,7 +105,9 @@ export class Game {
 
   private createBounds() {
     if (!this.world) return;
+
     const staticBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+
     this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(
         this.groundHalfWidth,
@@ -132,6 +148,7 @@ export class Game {
 
   private createPlayer() {
     if (!this.world) return;
+
     this.player = new Player(this.world, {
       x: 0,
       y: this.groundY + this.groundThickness / 2 + 1
@@ -140,22 +157,26 @@ export class Game {
 
   private stepPhysics(dt: number) {
     if (!this.world) return;
+
     this.accumulator += dt;
     const steps = Math.min(
       Math.floor(this.accumulator / this.fixedDt),
       this.maxStepsPerFrame
     );
+
     if (steps > 0) {
       this.world.integrationParameters.dt = this.fixedDt;
       for (let i = 0; i < steps; i += 1) {
         this.world.step();
       }
+
       this.accumulator -= steps * this.fixedDt;
     }
   }
 
   private applyControl(dt: number) {
     if (!this.player) return;
+
     const body = this.player.body;
     const vel = body.linvel();
     const pos = body.translation();
@@ -163,18 +184,22 @@ export class Game {
     const groundTop = this.groundY + this.groundThickness / 2;
     const onGround = footY <= groundTop + 0.05 && Math.abs(vel.y) < 1;
 
-
     let desiredVx = 0;
     const walkSpeed = 2.5;
     const runSpeed = 5;
+
     if (this.input.state.left) desiredVx -= walkSpeed;
+
     if (this.input.state.right) desiredVx += walkSpeed;
+
     if (this.input.state.sprint) {
       desiredVx =
         desiredVx > 0 ? runSpeed : desiredVx < 0 ? -runSpeed : 0;
     }
+
     const control = onGround ? 12 : 6;
     const newVx = vel.x + (desiredVx - vel.x) * control * dt;
+
     body.setLinvel({ x: newVx, y: vel.y }, true);
 
     // Snap to ground when grounded to avoid vertical drift from contact jitter
@@ -190,6 +215,7 @@ export class Game {
       const correctedVel = body.linvel();
       const correctedFootY = correctedPos.y - this.player.halfH;
       const groundTopAfter = this.groundY + this.groundThickness / 2;
+
       if (correctedFootY < groundTopAfter) {
         body.setTranslation(
           {
@@ -207,8 +233,10 @@ export class Game {
 
   private render(dt: number) {
     if (!this.player || !this.animator) return;
+
     const body = this.player.body;
     const renderPos = body.translation();
+
     // Camera follow
     this.camera.follow(renderPos, this.worldHalf);
 
@@ -217,11 +245,14 @@ export class Game {
       const bgWidth = this.camera.viewWidth * 1.5; // oversize to avoid seams
       const bgHeight = this.camera.viewHeight * 1.5;
       const parallaxX = this.camera.pos.x * this.bgParallax;
+
       this.bgOffsetX = parallaxX % bgWidth;
       const startX = -bgWidth / 2 - this.bgOffsetX;
       const drawY = (this.camera.viewHeight - bgHeight) / 2;
+
       for (let i = -1; i <= 1; i += 1) {
         const drawX = startX + i * bgWidth + this.camera.viewWidth / 2;
+
         this.ctx.drawImage(this.bg, drawX, drawY, bgWidth, bgHeight);
       }
     } else {
@@ -252,6 +283,7 @@ export class Game {
       renderPos.x,
       renderPos.y - this.player.halfH
     );
+
     if (sprite) {
       const spriteHeightPx = 2 * this.player.halfH * this.camera.metersToPixels;
       const padRatio = 170 / 900; // image padding top/bottom
@@ -259,6 +291,7 @@ export class Game {
       const srcH = sprite.height - srcY * 2;
       const srcW = sprite.width;
       const spriteWidthPx = spriteHeightPx * (srcW / srcH);
+
       this.ctx.save();
       this.ctx.translate(sx, sy);
       this.ctx.scale(facing, 1);
@@ -279,6 +312,7 @@ export class Game {
 
   private loop = (now: number) => {
     const dt = Math.min((now - this.last) / 1000, 1 / 30);
+
     this.last = now;
 
     this.applyControl(dt);

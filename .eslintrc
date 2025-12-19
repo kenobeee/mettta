@@ -1,0 +1,76 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "node": true
+  },
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "sourceType": "module",
+    "ecmaVersion": "latest"
+  },
+  "plugins": ["@typescript-eslint", "import", "promise"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:import/recommended",
+    "plugin:promise/recommended"
+  ],
+  "settings": {
+    "import/resolver": {
+      "node": {
+        "extensions": [".js", ".ts"]
+      }
+    }
+  },
+  "ignorePatterns": ["dist", "dist-electron", "node_modules"],
+  "rules": {
+    "import/order": [
+      "warn",
+      {
+        "newlines-between": "always",
+        "alphabetize": { "order": "asc", "caseInsensitive": true }
+      }
+    ],
+    "promise/always-return": "off",
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-unused-vars": "warn",
+    "@typescript-eslint/type-annotation-spacing": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/ban-types": "off",
+    "@typescript-eslint/ban-ts-comment": "off",
+    "@typescript-eslint/no-var-requires": "off",
+
+    "object-curly-spacing": "off",
+    "indent": ["warn", 2, { "SwitchCase": 1 }],
+    "key-spacing": ["error", { "beforeColon": false, "afterColon": true }],
+    "keyword-spacing": ["error", { "before": true }],
+    "semi": ["error", "always"],
+    "quotes": ["error", "single"],
+    "padding-line-between-statements": [
+      "warn",
+      { "blankLine": "always", "prev": ["const", "let", "var", "function", "if", "for"], "next": "*" },
+      { "blankLine": "any", "prev": ["const", "let", "var"], "next": ["const", "let", "var"] },
+      { "blankLine": "never", "prev": ["switch", "default", "break", "case"], "next": ["switch", "default", "break", "case"] }
+    ],
+    "newline-before-return": "warn",
+    "operator-linebreak": "off",
+    "no-multiple-empty-lines": ["warn", { "max": 1, "maxBOF": 1 }],
+    "consistent-return": "error",
+    "no-else-return": "error",
+    "no-var": "error",
+    "space-before-function-paren": [
+      "error",
+      { "anonymous": "never", "named": "never", "asyncArrow": "always" }
+    ],
+    "space-infix-ops": ["error", { "int32Hint": false }],
+    "arrow-spacing": ["error", { "before": true, "after": true }],
+    "arrow-body-style": ["warn", "as-needed", { "requireReturnForObjectLiteral": false }],
+    "max-len": [
+      "error",
+      { "code": 300, "ignoreStrings": true, "ignoreComments": true, "ignoreTemplateLiterals": true }
+    ],
+    "camelcase": "off"
+  }
+}

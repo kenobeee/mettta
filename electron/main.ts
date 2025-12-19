@@ -1,4 +1,5 @@
 import path from 'node:path';
+
 import { app, BrowserWindow } from 'electron';
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -24,7 +25,9 @@ const createWindow = () => {
   }
 };
 
-app.whenReady().then(() => {
+app
+  .whenReady()
+  .then(() => {
   createWindow();
 
   app.on('activate', () => {
@@ -32,7 +35,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
-});
+  })
+  .catch((err) => {
+    console.error('Failed to start Electron', err);
+  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

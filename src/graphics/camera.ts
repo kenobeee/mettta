@@ -50,6 +50,7 @@ export class Camera {
       Math.min(target.y, worldHalf - viewHalfWorldY)
     );
     const smooth = 0.12;
+
     this.pos.x += (desiredX - this.pos.x) * smooth;
     this.pos.y += (desiredY - this.pos.y) * smooth;
   }

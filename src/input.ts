@@ -10,6 +10,7 @@ export class InputManager {
   };
 
   constructor() {
+    
     const keyMap: Record<string, keyof typeof this.state> = {
       ArrowLeft: 'left',
       ArrowRight: 'right',
@@ -24,15 +25,18 @@ export class InputManager {
 
     window.addEventListener('keydown', (e) => {
       const mapped = keyMap[e.key];
+
       if (mapped) {
         this.state[mapped] = true;
         if (mapped === 'left') this.state.facing = -1;
+
         if (mapped === 'right') this.state.facing = 1;
       }
     });
 
     window.addEventListener('keyup', (e) => {
       const mapped = keyMap[e.key];
+
       if (mapped) {
         this.state[mapped] = false;
       }
