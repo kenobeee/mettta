@@ -55,6 +55,9 @@ export class Game {
   private readonly bgParallax = 0.2;
   private health = 100;
   private stamina = 100;
+  private runTime = 0;
+  private sprintLock = 0;
+  private hudTime = 0;
 
   private last = performance.now();
   private accumulator = 0;
@@ -186,17 +189,40 @@ export class Game {
     const groundTop = this.groundY + this.groundThickness / 2;
     const onGround = footY <= groundTop + 0.05 && Math.abs(vel.y) < 1;
 
+    const hasDir = this.input.state.left || this.input.state.right;
+    this.sprintLock = Math.max(0, this.sprintLock - dt);
+    const wantsSprint = this.input.state.sprint && this.sprintLock <= 0 && this.stamina > 0;
+    const running = hasDir && wantsSprint;
+
+    if (running) {
+      this.runTime += dt;
+      const drainPerSec = 0.5 * Math.exp(0.5 * this.runTime); // exponential drain
+      this.stamina = Math.max(0, this.stamina - drainPerSec * dt);
+      if (this.stamina <= 0) {
+        this.stamina = 0;
+        this.sprintLock = 5; // lock sprint for 5 seconds
+        this.runTime = 0;
+      }
+    } else {
+      this.runTime = 0;
+      if (hasDir) {
+        this.stamina = Math.min(100, this.stamina + 1 * dt);
+      } else {
+        this.stamina = Math.min(100, this.stamina + 5 * dt);
+      }
+    }
+
+    this.isSprinting = running && this.stamina > 0 && this.sprintLock <= 0;
     let desiredVx = 0;
     const walkSpeed = 2.5;
     const runSpeed = 5;
 
-    if (this.input.state.left) desiredVx -= walkSpeed;
+    if (this.input.state.left) {
+      desiredVx -= this.isSprinting ? runSpeed : walkSpeed;
+    }
 
-    if (this.input.state.right) desiredVx += walkSpeed;
-
-    if (this.input.state.sprint) {
-      desiredVx =
-        desiredVx > 0 ? runSpeed : desiredVx < 0 ? -runSpeed : 0;
+    if (this.input.state.right) {
+      desiredVx += this.isSprinting ? runSpeed : walkSpeed;
     }
 
     const control = onGround ? 12 : 6;
@@ -273,9 +299,12 @@ export class Game {
     // Player sprite
     const vel = body.linvel();
     const speed = Math.abs(vel.x);
+    // reuse sprint flag from control logic
+    const hasDir = this.input.state.left || this.input.state.right;
+    const wantsSprint = this.input.state.sprint && this.sprintLock <= 0 && this.stamina > 0;
     const mode: 'idle' | 'walk' | 'run' =
-      speed > 0.2
-        ? this.input.state.sprint
+      speed > 0.2 && hasDir
+        ? wantsSprint && this.isSprinting
           ? 'run'
           : 'walk'
         : 'idle';
@@ -315,6 +344,8 @@ export class Game {
   }
 
   private drawHud() {
+    this.hudTime += 0.016; // approximate; HUD is visual only
+
     const barWidth = this.camera.viewWidth * 0.05;
     const barHeight = 8;
     const margin = 12;
@@ -326,7 +357,8 @@ export class Game {
     const drawBar = (
       y: number,
       value: number,
-      color: string
+      color: string,
+      alpha = 1
     ) => {
       const clamped = Math.max(0, Math.min(100, value));
       const fillWidth = (barWidth - border * 2) * (clamped / 100);
@@ -335,12 +367,18 @@ export class Game {
       this.ctx.fillRect(startX, y, barWidth, barHeight);
 
       this.ctx.fillStyle = color;
+      if (alpha < 1) {
+        this.ctx.globalAlpha = alpha;
+      }
       this.ctx.fillRect(startX + border, y + border, fillWidth, barHeight - border * 2);
+      this.ctx.globalAlpha = 1;
     };
 
     drawBar(startY, this.health, '#e23d55'); // health - red
 
-    drawBar(startY + barHeight + gap, this.stamina, '#e9edf7'); // stamina - white
+    const lowStamina = this.stamina < 33;
+    const blinkAlpha = lowStamina ? 0.4 + 0.4 * Math.abs(Math.sin(this.hudTime * 3)) : 1;
+    drawBar(startY + barHeight + gap, this.stamina, '#e9edf7', blinkAlpha); // stamina - white
   }
 
   private loop = (now: number) => {
