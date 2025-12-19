@@ -5,6 +5,7 @@ export class SpriteAnimator {
   private timer = 0;
   private frame = 0;
   private readonly frameTime = 1 / 60; // 60 fps
+  private currentMode: 'idle' | 'walk' | 'run' = 'idle';
 
   constructor(
     private readonly idle: Frame[],
@@ -13,6 +14,12 @@ export class SpriteAnimator {
   ) {}
 
   update(dt: number, mode: 'idle' | 'walk' | 'run') {
+    if (mode !== this.currentMode) {
+      this.currentMode = mode;
+      this.frame = 0;
+      this.timer = 0;
+    }
+
     const set =
       mode === 'run'
         ? this.run.length

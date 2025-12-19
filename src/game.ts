@@ -163,6 +163,7 @@ export class Game {
     const groundTop = this.groundY + this.groundThickness / 2;
     const onGround = footY <= groundTop + 0.05 && Math.abs(vel.y) < 1;
 
+
     let desiredVx = 0;
     const walkSpeed = 2.5;
     const runSpeed = 5;
@@ -176,21 +177,30 @@ export class Game {
     const newVx = vel.x + (desiredVx - vel.x) * control * dt;
     body.setLinvel({ x: newVx, y: vel.y }, true);
 
-    // Prevent sinking through the ground
-    const correctedPos = body.translation();
-    const correctedVel = body.linvel();
-    const correctedFootY = correctedPos.y - this.player.halfH;
-    const groundTopAfter = this.groundY + this.groundThickness / 2;
-    if (correctedFootY < groundTopAfter) {
+    // Snap to ground when grounded to avoid vertical drift from contact jitter
+    if (onGround) {
       body.setTranslation(
-        {
-          x: correctedPos.x,
-          y: groundTopAfter + this.player.halfH
-        },
+        { x: pos.x, y: groundTop + this.player.halfH },
         true
       );
-      if (correctedVel.y < 0) {
-        body.setLinvel({ x: correctedVel.x, y: 0 }, true);
+      body.setLinvel({ x: newVx, y: 0 }, true);
+    } else {
+      // Prevent sinking through the ground
+      const correctedPos = body.translation();
+      const correctedVel = body.linvel();
+      const correctedFootY = correctedPos.y - this.player.halfH;
+      const groundTopAfter = this.groundY + this.groundThickness / 2;
+      if (correctedFootY < groundTopAfter) {
+        body.setTranslation(
+          {
+            x: correctedPos.x,
+            y: groundTopAfter + this.player.halfH
+          },
+          true
+        );
+        if (correctedVel.y < 0) {
+          body.setLinvel({ x: correctedVel.x, y: 0 }, true);
+        }
       }
     }
   }
