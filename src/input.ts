@@ -9,6 +9,17 @@ export class InputManager {
     attack: false,
     facing: 1 as Facing
   };
+  private disabled = false;
+
+  setEnabled(enabled: boolean) {
+    this.disabled = !enabled;
+    if (this.disabled) {
+      this.state.left = false;
+      this.state.right = false;
+      this.state.sprint = false;
+      this.state.attack = false;
+    }
+  }
 
   constructor() {
     
@@ -27,6 +38,7 @@ export class InputManager {
     };
 
     window.addEventListener('keydown', (e) => {
+      if (this.disabled) return;
       const mapped = keyMap[e.key];
 
       if (mapped) {
@@ -39,6 +51,7 @@ export class InputManager {
     });
 
     window.addEventListener('keyup', (e) => {
+      if (this.disabled) return;
       const mapped = keyMap[e.key];
 
       if (mapped) {

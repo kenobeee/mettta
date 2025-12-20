@@ -133,6 +133,7 @@ export class Game {
   private botAttackTimer = 0;
   private botAttackHitApplied = false;
   private botAggro = false;
+  private botRunning = false;
   private botMode: Mode = 'idle';
   private botFacing: Facing = 1;
   private botTimer = 0;
@@ -316,6 +317,7 @@ export class Game {
     this.attackMode = 'none';
     this.attackTimer = 0;
     this.playerAttackHitApplied = false;
+    this.input.setEnabled(true);
   }
 
   private createBot() {
@@ -337,8 +339,8 @@ export class Game {
     this.botAttackTimer = 0;
     this.botAttackHitApplied = false;
     this.botAggro = false;
+    this.botRunning = false;
     this.botTimer = 0;
-    this.botAggro = false;
     this.botMove = false;
     this.botMode = 'idle';
     this.botFacing = 1;
@@ -481,16 +483,18 @@ export class Game {
 
     if (!playerAlive && !botAlive) return;
 
-    const overlapX = Math.abs(
-      this.player.body.translation().x - this.bot.body.translation().x
-    ) <= this.player.halfW + this.bot.halfW;
+    const dx = this.bot.body.translation().x - this.player.body.translation().x;
+    const overlapX = Math.abs(dx) <= this.player.halfW + this.bot.halfW;
+    const playerFacingTarget = Math.sign(dx || 1) === this.input.state.facing;
+    const botFacingTarget = Math.sign(-dx || 1) === this.botFacing;
 
     // Player attacking bot
     if (
       botAlive &&
       this.attackMode !== 'none' &&
       !this.playerAttackHitApplied &&
-      overlapX
+      overlapX &&
+      playerFacingTarget
     ) {
       const dmg = this.randomDamage();
       this.botHealth = Math.max(0, this.botHealth - dmg);
@@ -511,7 +515,8 @@ export class Game {
       this.botAggro &&
       this.botAttackMode !== 'none' &&
       !this.botAttackHitApplied &&
-      overlapX
+      overlapX &&
+      botFacingTarget
     ) {
       const dmg = this.randomDamage();
       this.health = Math.max(0, this.health - dmg);
@@ -522,6 +527,7 @@ export class Game {
         this.attackMode = 'none';
         this.attackTimer = 0;
         this.playerAttackHitApplied = false;
+        this.input.setEnabled(false);
       }
     }
   }
@@ -594,6 +600,7 @@ export class Game {
       } else {
         if (this.botAttackMode === 'idle') botMode = 'idle-attack';
         if (this.botAttackMode === 'move') botMode = 'move-attack';
+        if (this.botRunning && this.botAttackMode === 'none') botMode = 'run';
       }
       const botSprite = this.botAnimator.update(dt, botMode);
       const { x: bx, y: by } = this.camera.worldToScreen(
@@ -781,16 +788,19 @@ export class Game {
     }
 
     const walkSpeed = 2.2;
+    const runSpeed = 4.2;
 
     let desiredVx = 0;
     let chaseTarget = false;
+    this.botRunning = false;
 
     if (this.botAggro && this.player && this.health > 0) {
       const targetX = this.player.body.translation().x;
       const dx = targetX - pos.x;
       this.botFacing = dx >= 0 ? 1 : -1;
-      desiredVx = walkSpeed * this.botFacing;
+      desiredVx = runSpeed * this.botFacing;
       chaseTarget = true;
+      this.botRunning = true;
 
       // If already overlapping X, stop to attack
       if (Math.abs(dx) <= this.player.halfW + this.bot.halfW) {
@@ -853,6 +863,7 @@ export class Game {
       this.botAttackMode = 'none';
       this.botAttackTimer = 0;
       this.botAttackHitApplied = false;
+      this.botRunning = false;
     }
   }
 }
