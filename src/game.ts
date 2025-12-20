@@ -799,17 +799,19 @@ export class Game {
     this.botRunning = false;
 
     if (this.botAggro && this.player && this.health > 0) {
+      this.botMove = false; // disable wander anim while in PvP
       const targetX = this.player.body.translation().x;
       const dx = targetX - pos.x;
+      const reach = this.player.halfW + this.bot.halfW;
+      const inRange = Math.abs(dx) <= reach;
       this.botFacing = dx >= 0 ? 1 : -1;
-      desiredVx = runSpeed * this.botFacing;
+      desiredVx = inRange ? 0 : runSpeed * this.botFacing;
       chaseTarget = true;
-      this.botRunning = true;
+      this.botRunning = !inRange;
 
-      // If already overlapping X, stop to attack
-      if (Math.abs(dx) <= this.player.halfW + this.bot.halfW) {
-        desiredVx = 0;
-      if (this.botAttackMode === 'none' && this.botAttackCooldown <= 0) {
+      // If in range, stay idle between swings; only start attack when off cooldown
+      if (inRange) {
+        if (this.botAttackMode === 'none' && this.botAttackCooldown <= 0) {
           const movingAttack = Math.abs(vel.x) > 0.2;
           this.botAttackMode = movingAttack ? 'move' : 'idle';
           this.botAttackTimer = movingAttack
