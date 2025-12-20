@@ -12,7 +12,8 @@ export class SpriteAnimator {
     private readonly walk: Frame[],
     private readonly run: Frame[],
     private readonly idleAttack: Frame[],
-    private readonly moveAttack: Frame[]
+    private readonly moveAttack: Frame[],
+    private readonly dead: Frame[]
   ) {}
 
   update(dt: number, mode: Mode) {
@@ -23,28 +24,38 @@ export class SpriteAnimator {
     }
 
     const set =
-      mode === 'run'
-        ? this.run.length
-          ? this.run
+      mode === 'dead'
+        ? this.dead.length
+          ? this.dead
           : this.idle
-        : mode === 'walk'
-          ? this.walk.length
-            ? this.walk
+        : mode === 'run'
+          ? this.run.length
+            ? this.run
             : this.idle
-          : mode === 'idle-attack'
-            ? this.idleAttack.length
-              ? this.idleAttack
+          : mode === 'walk'
+            ? this.walk.length
+              ? this.walk
               : this.idle
-            : mode === 'move-attack'
-              ? this.moveAttack.length
-                ? this.moveAttack
-                : this.walk
-              : this.idle;
+            : mode === 'idle-attack'
+              ? this.idleAttack.length
+                ? this.idleAttack
+                : this.idle
+              : mode === 'move-attack'
+                ? this.moveAttack.length
+                  ? this.moveAttack
+                  : this.walk
+                : this.idle;
 
     this.timer += dt;
     if (this.timer > this.frameTime) {
       this.timer = 0;
-      this.frame = (this.frame + 1) % set.length;
+      if (mode === 'dead') {
+        if (this.frame < set.length - 1) {
+          this.frame += 1;
+        }
+      } else {
+        this.frame = (this.frame + 1) % set.length;
+      }
     }
     
     return set[this.frame % set.length];

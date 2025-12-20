@@ -6,6 +6,7 @@ export type Mode =
   | 'walk'
   | 'run'
   | 'idle-attack'
-  | 'move-attack';
+  | 'move-attack'
+  | 'dead';
 export type Facing = 1 | -1;
 

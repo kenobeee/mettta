@@ -27,6 +27,11 @@ const idleImports = import.meta.glob('../assets/player/idle/*.png', {
   import: 'default',
   eager: true
 });
+const deadImports = import.meta.glob('../assets/player/dead/*.png', {
+  query: '?url',
+  import: 'default',
+  eager: true
+});
 const runningImports = import.meta.glob('../assets/player/running/*.png', {
   query: '?url',
   import: 'default',
@@ -51,6 +56,11 @@ const moveAttackImports = import.meta.glob(
   }
 );
 const botIdleImports = import.meta.glob('../assets/player2/idle/*.png', {
+  query: '?url',
+  import: 'default',
+  eager: true
+});
+const botDeadImports = import.meta.glob('../assets/player2/dead/*.png', {
   query: '?url',
   import: 'default',
   eager: true
@@ -108,6 +118,7 @@ export class Game {
   private bgOffsetX = 0;
   private readonly bgParallax = 0.2;
   private health = 100;
+  private botHealth = 100;
   private stamina = 100;
   private runTime = 0;
   private sprintLock = 0;
@@ -117,10 +128,23 @@ export class Game {
   private attackDurationIdle = 0.5;
   private attackDurationMove = 0.5;
   private lastAttackPressed = false;
+  private playerAttackHitApplied = false;
+  private botAttackMode: 'none' | 'idle' | 'move' = 'none';
+  private botAttackTimer = 0;
+  private botAttackHitApplied = false;
+  private botAggro = false;
   private botMode: Mode = 'idle';
   private botFacing: Facing = 1;
   private botTimer = 0;
   private botMove = false;
+  private floatTexts: {
+    x: number;
+    y: number;
+    value: number;
+    color: string;
+    ttl: number;
+    age: number;
+  }[] = [];
 
   private last = performance.now();
   private accumulator = 0;
@@ -153,11 +177,13 @@ export class Game {
       bg,
       tile,
       idleFrames,
+      deadFrames,
       runningFrames,
       walkingFrames,
       idleAttackFrames,
       moveAttackFrames,
       botIdleFrames,
+      botDeadFrames,
       botWalkFrames,
       botRunFrames,
       botIdleAttackFrames,
@@ -173,16 +199,20 @@ export class Game {
       Frame[],
       Frame[],
       Frame[],
+      Frame[],
+      Frame[],
       Frame[]
     ] = await Promise.all([
       loadImage(bgUrl),
       loadImage(tileUrl),
       loadFrames(idleImports),
+      loadFrames(deadImports),
       loadFrames(runningImports),
       loadFrames(walkingImports),
       loadFrames(idleAttackImports),
       loadFrames(moveAttackImports),
       loadFrames(botIdleImports),
+      loadFrames(botDeadImports),
       loadFrames(botWalkImports),
       loadFrames(botRunImports),
       loadFrames(botIdleAttackImports),
@@ -196,14 +226,16 @@ export class Game {
       walkingFrames,
       runningFrames,
       idleAttackFrames,
-      moveAttackFrames
+      moveAttackFrames,
+      deadFrames
     );
     this.botAnimator = new SpriteAnimator(
       botIdleFrames,
       botWalkFrames,
       botRunFrames,
       botIdleAttackFrames,
-      botMoveAttackFrames
+      botMoveAttackFrames,
+      botDeadFrames
     );
     this.attackDurationIdle =
       idleAttackFrames.length > 0
@@ -279,6 +311,11 @@ export class Game {
       RAPIER.ActiveCollisionTypes.DEFAULT &
         ~RAPIER.ActiveCollisionTypes.DYNAMIC_DYNAMIC
     );
+    this.health = 100;
+    this.stamina = 100;
+    this.attackMode = 'none';
+    this.attackTimer = 0;
+    this.playerAttackHitApplied = false;
   }
 
   private createBot() {
@@ -295,7 +332,13 @@ export class Game {
       RAPIER.ActiveCollisionTypes.DEFAULT &
         ~RAPIER.ActiveCollisionTypes.DYNAMIC_DYNAMIC
     );
+    this.botHealth = 100;
+    this.botAttackMode = 'none';
+    this.botAttackTimer = 0;
+    this.botAttackHitApplied = false;
+    this.botAggro = false;
     this.botTimer = 0;
+    this.botAggro = false;
     this.botMove = false;
     this.botMode = 'idle';
     this.botFacing = 1;
@@ -321,7 +364,7 @@ export class Game {
   }
 
   private applyControl(dt: number) {
-    if (!this.player) return;
+    if (!this.player || this.health <= 0) return;
 
     const body = this.player.body;
     const vel = body.linvel();
@@ -349,6 +392,7 @@ export class Game {
         this.attackTimer = movingAttack
           ? this.attackDurationMove
           : this.attackDurationIdle;
+        this.playerAttackHitApplied = false;
       }
     }
 
@@ -359,6 +403,7 @@ export class Game {
       if (this.attackTimer <= 0) {
         this.attackMode = 'none';
         this.attackTimer = 0;
+        this.playerAttackHitApplied = false;
       }
     }
 
@@ -428,6 +473,74 @@ export class Game {
     }
   }
 
+  private handleCombat() {
+    if (!this.player || !this.bot) return;
+
+    const playerAlive = this.health > 0;
+    const botAlive = this.botHealth > 0;
+
+    if (!playerAlive && !botAlive) return;
+
+    const overlapX = Math.abs(
+      this.player.body.translation().x - this.bot.body.translation().x
+    ) <= this.player.halfW + this.bot.halfW;
+
+    // Player attacking bot
+    if (
+      botAlive &&
+      this.attackMode !== 'none' &&
+      !this.playerAttackHitApplied &&
+      overlapX
+    ) {
+      const dmg = this.randomDamage();
+      this.botHealth = Math.max(0, this.botHealth - dmg);
+      this.playerAttackHitApplied = true;
+      this.botAggro = true;
+      const botPos = this.bot.body.translation();
+      this.addFloatText(botPos.x, botPos.y + this.bot.halfH + 0.3, dmg, '#f5f5f5');
+      if (this.botHealth <= 0) {
+        this.botAttackMode = 'none';
+        this.botAttackTimer = 0;
+        this.botAttackHitApplied = false;
+      }
+    }
+
+    // Bot attacking player (only after aggro)
+    if (
+      playerAlive &&
+      this.botAggro &&
+      this.botAttackMode !== 'none' &&
+      !this.botAttackHitApplied &&
+      overlapX
+    ) {
+      const dmg = this.randomDamage();
+      this.health = Math.max(0, this.health - dmg);
+      this.botAttackHitApplied = true;
+      const pPos = this.player.body.translation();
+      this.addFloatText(pPos.x, pPos.y + this.player.halfH + 0.3, dmg, '#e23d55');
+      if (this.health <= 0) {
+        this.attackMode = 'none';
+        this.attackTimer = 0;
+        this.playerAttackHitApplied = false;
+      }
+    }
+  }
+
+  private randomDamage() {
+    return Math.floor(5 + Math.random() * 6); // 5..10
+  }
+
+  private addFloatText(x: number, y: number, value: number, color: string) {
+    this.floatTexts.push({
+      x,
+      y,
+      value,
+      color,
+      ttl: 1,
+      age: 0
+    });
+  }
+
   private render(dt: number) {
     if (!this.player || !this.animator) return;
 
@@ -475,7 +588,13 @@ export class Game {
 
       if (botVel.x < -0.1) this.botFacing = -1;
 
-      const botMode: Mode = this.botMove ? 'walk' : 'idle';
+      let botMode: Mode = this.botMove ? 'walk' : 'idle';
+      if (this.botHealth <= 0) {
+        botMode = 'dead';
+      } else {
+        if (this.botAttackMode === 'idle') botMode = 'idle-attack';
+        if (this.botAttackMode === 'move') botMode = 'move-attack';
+      }
       const botSprite = this.botAnimator.update(dt, botMode);
       const { x: bx, y: by } = this.camera.worldToScreen(
         botPos.x,
@@ -514,9 +633,11 @@ export class Game {
     const hasDir = this.input.state.left || this.input.state.right;
     const wantsSprint = this.input.state.sprint && this.sprintLock <= 0 && this.stamina > 0;
     const isMoving = speed > 0.2 && hasDir;
-    let mode: 'idle' | 'walk' | 'run' | 'idle-attack' | 'move-attack' = 'idle';
+    let mode: Mode = 'idle';
 
-    if (this.attackMode === 'idle') {
+    if (this.health <= 0) {
+      mode = 'dead';
+    } else if (this.attackMode === 'idle') {
       mode = 'idle-attack';
     } else if (this.attackMode === 'move') {
       mode = 'move-attack';
@@ -556,7 +677,27 @@ export class Game {
       this.ctx.restore();
     }
 
+    this.drawFloatTexts(dt);
     this.drawHud();
+  }
+
+  private drawFloatTexts(dt: number) {
+    if (!this.player) return;
+
+    this.floatTexts = this.floatTexts.filter((f) => f.age < f.ttl);
+    for (const f of this.floatTexts) {
+      f.age += dt;
+      const alpha = Math.max(0, 1 - f.age / f.ttl);
+      const rise = f.age * 1; // meters per second upward
+      const { x, y } = this.camera.worldToScreen(f.x, f.y + rise);
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha;
+      this.ctx.fillStyle = f.color;
+      this.ctx.font = '16px Arial';
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText(`${f.value}`, x, y);
+      this.ctx.restore();
+    }
   }
 
   private drawHud() {
@@ -571,6 +712,7 @@ export class Game {
     const startY = this.camera.viewHeight - margin - (barHeight + gap) * 2;
 
     const drawBar = (
+      x: number,
       y: number,
       value: number,
       color: string,
@@ -580,23 +722,23 @@ export class Game {
       const fillWidth = (barWidth - border * 2) * (clamped / 100);
 
       this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      this.ctx.fillRect(startX, y, barWidth, barHeight);
+      this.ctx.fillRect(x, y, barWidth, barHeight);
 
       this.ctx.fillStyle = color;
       if (alpha < 1) {
         this.ctx.globalAlpha = alpha;
       }
 
-      this.ctx.fillRect(startX + border, y + border, fillWidth, barHeight - border * 2);
+      this.ctx.fillRect(x + border, y + border, fillWidth, barHeight - border * 2);
       this.ctx.globalAlpha = 1;
     };
 
-    drawBar(startY, this.health, '#e23d55'); // health - red
+    drawBar(startX, startY, this.health, '#e23d55'); // player health
 
     const lowStamina = this.stamina < 33;
     const blinkAlpha = lowStamina ? 0.4 + 0.4 * Math.abs(Math.sin(this.hudTime * 3)) : 1;
 
-    drawBar(startY + barHeight + gap, this.stamina, '#e9edf7', blinkAlpha); // stamina - white
+    drawBar(startX, startY + barHeight + gap, this.stamina, '#e9edf7', blinkAlpha); // stamina - white
   }
 
   private loop = (now: number) => {
@@ -607,6 +749,7 @@ export class Game {
     this.applyControl(dt);
     this.stepPhysics(dt);
     this.updateBot(dt);
+    this.handleCombat();
     this.render(dt);
 
     requestAnimationFrame(this.loop);
@@ -615,6 +758,11 @@ export class Game {
   private updateBot(dt: number) {
     if (!this.bot || !this.botAnimator || !this.world) return;
 
+    if (this.botHealth <= 0) {
+      this.bot.body.setLinvel({ x: 0, y: 0 }, true);
+      return;
+    }
+
     const body = this.bot.body;
     const vel = body.linvel();
     const pos = body.translation();
@@ -622,17 +770,54 @@ export class Game {
     const groundTop = this.groundY + this.groundThickness / 2;
     const onGround = footY <= groundTop + 0.05 && Math.abs(vel.y) < 1;
 
-    this.botTimer -= dt;
-    if (this.botTimer <= 0) {
-      this.botMove = Math.random() > 0.4; // 60% move, 40% idle
-      this.botTimer = 1 + Math.random() * 2; // 1-3 seconds
-      if (this.botMove) {
-        this.botFacing = Math.random() > 0.5 ? 1 : -1;
+    // Attack timer
+    if (this.botAttackMode !== 'none') {
+      this.botAttackTimer -= dt;
+      if (this.botAttackTimer <= 0) {
+        this.botAttackMode = 'none';
+        this.botAttackTimer = 0;
+        this.botAttackHitApplied = false;
       }
     }
 
     const walkSpeed = 2.2;
-    const desiredVx = this.botMove ? walkSpeed * this.botFacing : 0;
+
+    let desiredVx = 0;
+    let chaseTarget = false;
+
+    if (this.botAggro && this.player && this.health > 0) {
+      const targetX = this.player.body.translation().x;
+      const dx = targetX - pos.x;
+      this.botFacing = dx >= 0 ? 1 : -1;
+      desiredVx = walkSpeed * this.botFacing;
+      chaseTarget = true;
+
+      // If already overlapping X, stop to attack
+      if (Math.abs(dx) <= this.player.halfW + this.bot.halfW) {
+        desiredVx = 0;
+        if (this.botAttackMode === 'none') {
+          const movingAttack = Math.abs(vel.x) > 0.2;
+          this.botAttackMode = movingAttack ? 'move' : 'idle';
+          this.botAttackTimer = movingAttack
+            ? this.attackDurationMove
+            : this.attackDurationIdle;
+          this.botAttackHitApplied = false;
+        }
+      }
+    }
+
+    if (!this.botAggro) {
+      this.botTimer -= dt;
+      if (this.botTimer <= 0) {
+        this.botMove = Math.random() > 0.4; // 60% move, 40% idle
+        this.botTimer = 1 + Math.random() * 2; // 1-3 seconds
+        if (this.botMove) {
+          this.botFacing = Math.random() > 0.5 ? 1 : -1;
+        }
+      }
+      desiredVx = this.botMove ? walkSpeed * this.botFacing : 0;
+    }
+
     let finalDesiredVx = desiredVx;
     const nearRight = pos.x > this.rightX - 0.5;
     const nearLeft = pos.x < this.leftX + 0.5;
@@ -646,7 +831,7 @@ export class Game {
       this.botFacing = 1;
       finalDesiredVx = Math.max(finalDesiredVx, 0);
     }
-    
+
     const control = onGround ? 10 : 4;
     const newVx = vel.x + (finalDesiredVx - vel.x) * control * dt;
 
@@ -660,6 +845,14 @@ export class Game {
       if (vel.y !== 0) {
         body.setLinvel({ x: newVx, y: 0 }, true);
       }
+    }
+
+    // If bot was aggro but player died, reset to idle wander
+    if (this.health <= 0 && this.botAggro && !chaseTarget) {
+      this.botAggro = false;
+      this.botAttackMode = 'none';
+      this.botAttackTimer = 0;
+      this.botAttackHitApplied = false;
     }
   }
 }
