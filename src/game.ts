@@ -131,6 +131,7 @@ export class Game {
   private playerAttackHitApplied = false;
   private botAttackMode: 'none' | 'idle' | 'move' = 'none';
   private botAttackTimer = 0;
+  private botAttackCooldown = 0;
   private botAttackHitApplied = false;
   private botAggro = false;
   private botRunning = false;
@@ -337,6 +338,7 @@ export class Game {
     this.botHealth = 100;
     this.botAttackMode = 'none';
     this.botAttackTimer = 0;
+    this.botAttackCooldown = 0;
     this.botAttackHitApplied = false;
     this.botAggro = false;
     this.botRunning = false;
@@ -784,8 +786,10 @@ export class Game {
         this.botAttackMode = 'none';
         this.botAttackTimer = 0;
         this.botAttackHitApplied = false;
+        this.botAttackCooldown = 0.5;
       }
     }
+    this.botAttackCooldown = Math.max(0, this.botAttackCooldown - dt);
 
     const walkSpeed = 2.2;
     const runSpeed = 4.2;
@@ -805,7 +809,7 @@ export class Game {
       // If already overlapping X, stop to attack
       if (Math.abs(dx) <= this.player.halfW + this.bot.halfW) {
         desiredVx = 0;
-        if (this.botAttackMode === 'none') {
+      if (this.botAttackMode === 'none' && this.botAttackCooldown <= 0) {
           const movingAttack = Math.abs(vel.x) > 0.2;
           this.botAttackMode = movingAttack ? 'move' : 'idle';
           this.botAttackTimer = movingAttack
