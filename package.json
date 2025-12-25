@@ -5,7 +5,10 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently \"tsc -p tsconfig.node.json --watch\" \"vite --clearScreen false\" \"wait-on http://localhost:5173 && electron dist-electron/main.js\"",
-    "build": "tsc -p tsconfig.node.json && vite build && electron-builder",
+    "build:bundle": "tsc -p tsconfig.node.json && vite build",
+    "build:mac": "npm run build:bundle && electron-builder --mac --publish=never && node scripts/clean-artifacts.js",
+    "build:win": "npm run build:bundle && electron-builder --win --publish=never && node scripts/clean-artifacts.js",
+    "build:all": "npm run build:bundle && electron-builder --mac --win --publish=never && node scripts/clean-artifacts.js",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint \"{src,electron}/**/*.{ts,tsx}\""
   },
   "dependencies": {
@@ -27,8 +30,14 @@
     "wait-on": "^7.2.0"
   },
   "build": {
+    "productName": "meTTTa",
     "appId": "com.tttmeta.app",
     "asar": false,
+    "artifactName": "${name}-${version}-${os}-${arch}.${ext}",
+    "publish": null,
+    "nsis": {
+      "include": "build/installer.nsh"
+    },
     "files": [
       "dist/**",
       "dist-electron/**",
