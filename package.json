@@ -1,14 +1,11 @@
 {
-  "name": "ttt-meta",
+  "name": "meTTTa",
   "version": "0.1.0",
-  "description": "Electron + Vite + TypeScript + Rapier2D starter",
+  "description": "metaspace",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently \"tsc -p tsconfig.node.json --watch\" \"vite --clearScreen false\" \"wait-on http://localhost:5173 && electron dist-electron/main.js\"",
-    "build:renderer": "vite build",
-    "build:main": "tsc -p tsconfig.node.json",
-    "build": "npm run build:main && npm run build:renderer",
-    "start": "NODE_ENV=production electron .",
+    "build": "tsc -p tsconfig.node.json && vite build && electron-builder",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint \"{src,electron}/**/*.{ts,tsx}\""
   },
   "dependencies": {
@@ -20,6 +17,7 @@
     "@typescript-eslint/parser": "^7.9.0",
     "concurrently": "^8.2.0",
     "electron": "^30.0.0",
+    "electron-builder": "^24.13.3",
     "eslint": "^8.57.0",
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-promise": "^6.1.1",
@@ -27,5 +25,27 @@
     "typescript": "^5.4.0",
     "vite": "^5.4.0",
     "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.tttmeta.app",
+    "asar": false,
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

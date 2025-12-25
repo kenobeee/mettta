@@ -1,4 +1,5 @@
 import RAPIER from '@dimforge/rapier2d-compat';
+import rapierWasmUrl from '@dimforge/rapier2d-compat/rapier_wasm2d_bg.wasm?url';
 
 import bgUrl from '../assets/bg.png';
 import tileUrl from '../assets/tile.png';
@@ -22,66 +23,66 @@ const GROUP_BOT = 0x0004;
 const cg = (membership: number, filter: number) =>
   (membership << 16) | filter;
 
-const idleImports = import.meta.glob('../assets/player/idle/*.png', {
+const idleImports = import.meta.glob('../assets/player/idle/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
-const deadImports = import.meta.glob('../assets/player/dead/*.png', {
+const deadImports = import.meta.glob('../assets/player/dead/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
-const runningImports = import.meta.glob('../assets/player/running/*.png', {
+const runningImports = import.meta.glob('../assets/player/running/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
-const walkingImports = import.meta.glob('../assets/player/walking/*.png', {
+const walkingImports = import.meta.glob('../assets/player/walking/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
-const idleAttackImports = import.meta.glob('../assets/player/atack/*.png', {
+const idleAttackImports = import.meta.glob('../assets/player/atack/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
 const moveAttackImports = import.meta.glob(
-  '../assets/player/running-atack/*.png',
+  '../assets/player/running-atack/[0-9]*.png',
   {
     query: '?url',
     import: 'default',
     eager: true
   }
 );
-const botIdleImports = import.meta.glob('../assets/bots/1/idle/*.png', {
+const botIdleImports = import.meta.glob('../assets/bots/1/idle/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
-const botDeadImports = import.meta.glob('../assets/bots/1/dead/*.png', {
+const botDeadImports = import.meta.glob('../assets/bots/1/dead/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
-const botWalkImports = import.meta.glob('../assets/bots/1/walking/*.png', {
+const botWalkImports = import.meta.glob('../assets/bots/1/walking/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
-const botRunImports = import.meta.glob('../assets/bots/1/running/*.png', {
+const botRunImports = import.meta.glob('../assets/bots/1/running/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
-const botIdleAttackImports = import.meta.glob('../assets/bots/1/atack/*.png', {
+const botIdleAttackImports = import.meta.glob('../assets/bots/1/atack/[0-9]*.png', {
   query: '?url',
   import: 'default',
   eager: true
 });
 const botMoveAttackImports = import.meta.glob(
-  '../assets/bots/1/running-atack/*.png',
+  '../assets/bots/1/running-atack/[0-9]*.png',
   {
     query: '?url',
     import: 'default',
@@ -179,7 +180,19 @@ export class Game {
   }
 
   async init() {
-    await RAPIER.init();
+    // Resolve wasm to absolute URL and feed raw bytes to avoid file:// fetch quirks.
+    const wasmUrl = new URL(rapierWasmUrl, window.location.href).toString();
+    const wasmResp = await fetch(wasmUrl);
+
+    if (!wasmResp.ok) {
+      throw new Error(`Failed to load Rapier wasm: ${wasmResp.status} ${wasmResp.statusText}`);
+    }
+
+    const wasmBytes = await wasmResp.arrayBuffer();
+
+    await (RAPIER as unknown as { init: (module?: unknown) => Promise<void> }).init(
+      wasmBytes
+    );
     this.world = new RAPIER.World(this.gravity);
     const params = this.world.integrationParameters;
 

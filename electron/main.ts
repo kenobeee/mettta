@@ -2,7 +2,13 @@ import path from 'node:path';
 
 import { app, BrowserWindow } from 'electron';
 
-const isDev = process.env.NODE_ENV !== 'production';
+// app.isPackaged надёжнее, чем переменная окружения в финальной сборке
+const isDev = !app.isPackaged;
+
+// Разрешаем загрузку локальных файлов (wasm) при file://
+app.commandLine.appendSwitch('allow-file-access-from-files');
+// Чтобы гарантированно читать файлы из app.asar (или распакованных ассетов)
+app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
 
 const createWindow = () => {
   const preloadPath = path.join(__dirname, 'preload.js');
@@ -12,7 +18,8 @@ const createWindow = () => {
     height: 640,
     webPreferences: {
       contextIsolation: true,
-      preload: preloadPath
+      preload: preloadPath,
+      webSecurity: false
     }
   });
 
