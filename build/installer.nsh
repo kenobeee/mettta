@@ -7,30 +7,19 @@
   ; На всякий случай пробуем альтернативное имя с дефисом
   StrCpy $1 "ttt-meta.exe"
 
-  Call KillIfRunning
-!macroend
-
-Function KillIfRunning
-  ; До 3 попыток закрыть оба процесса
+  ; До 5 попыток закрыть возможные процессы через taskkill/PowerShell (без плагинов)
   StrCpy $5 0
-  ${DoWhile} $5 < 3
-    nsProcess::FindProcess "$0"
-    Pop $3
-    ${If} $3 = 0
-      nsProcess::KillProcess "$0"
-      Pop $4
-      Sleep 500
-    ${EndIf}
-
-    nsProcess::FindProcess "$1"
-    Pop $3
-    ${If} $3 = 0
-      nsProcess::KillProcess "$1"
-      Pop $4
-      Sleep 500
-    ${EndIf}
-
+  ${DoWhile} $5 < 5
+    ; основное имя
+    nsExec::ExecToLog 'taskkill /IM "$0" /T /F'
+    ; альтернативное
+    nsExec::ExecToLog 'taskkill /IM "$1" /T /F'
+    ; запасной electron.exe (если что-то осталось от dev)
+    nsExec::ExecToLog 'taskkill /IM "electron.exe" /T /F'
+    ; powershell на случай других имён/инстансов
+    nsExec::ExecToLog 'powershell -NoProfile -Command "Get-Process meTTTa,mettta,''ttt-meta'' -ErrorAction SilentlyContinue | Stop-Process -Force"'
+    Sleep 500
     IntOp $5 $5 + 1
   ${Loop}
-FunctionEnd
+!macroend
 
